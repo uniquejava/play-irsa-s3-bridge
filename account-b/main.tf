@@ -8,7 +8,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "s3bridge-tf-state-account-b"
+    bucket       = "cyper-s3bridge-tf-state-account-b"
     key          = "account-b/terraform.tfstate"
     region       = "ap-northeast-1"
     encrypt      = true
