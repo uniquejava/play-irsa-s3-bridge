@@ -1,0 +1,68 @@
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Terraform files
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# AWS credentials
+.aws/
+
+# Kubernetes files
+*.kubeconfig
+*.yaml
+*.yml
+!k8s/*.yaml.template
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+
+# Local configuration
+local/
+.local/
+
+# Test outputs
+test-results/
+coverage/
+
+# Node modules
+node_modules/
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Cache directories
+.cache/
+*.cache
