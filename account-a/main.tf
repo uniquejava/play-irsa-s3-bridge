@@ -35,7 +35,7 @@ module "eks" {
   endpoint_public_access  = true # For kubectl access
 
   eks_managed_node_groups = {
-    default = {
+    s3bridge_nodes = {
       min_size       = 1
       max_size       = 3
       desired_size   = 2

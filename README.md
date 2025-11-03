@@ -1,344 +1,223 @@
-# S3 Bridge: Cross-Account S3 Access from EKS using IRSA
+# EKS 跨账户 S3 访问实战：IRSA 架构设计
 
-This project demonstrates cross-account S3 access from AWS EKS pods using IAM Roles for Service Accounts (IRSA) with VPC Endpoints for cost optimization. The architecture spans two AWS accounts and showcases secure, cost-effective cross-account resource access.
+这个项目演示了如何通过 IAM Roles for Service Accounts (IRSA) 实现 EKS Pod 跨账户访问 S3 的完整方案。架构跨越两个 AWS 账户，展示了安全且成本优化的跨账户资源访问模式。
 
-## Architecture Overview
+## 架构设计
 
 ```
 ┌─────────────────┐          ┌─────────────────┐
-│   Account A     │          │   Account B     │
-│   (EKS Account) │          │   (S3 Account)  │
+│   账户 A        │          │   账户 B        │
+│  (EKS 账户)     │          │  (S3 账户)     │
 ├─────────────────┤          ├─────────────────┤
 │                 │          │                 │
 │  ┌───────────┐  │          │  ┌───────────┐  │
-│  │EKS Cluster│  │ IRSA +   │  │ S3 Bucket │  │
-│  │           │  │Cross-Acct│  │           │  │
-│  └─────┬─────┘  │ Role Ass. │  └───────────┘  │
+│  │EKS 集群   │  │ IRSA +   │  │ S3 存储桶 │  │
+│  │           │  │跨账户   │  │           │  │
+│  └─────┬─────┘  │ 角色扮演  │  └───────────┘  │
 │        │        │   ───────▶│                 │
 │  ┌─────▼─────┐  │          │  ┌───────────┐  │
-│  │Test Pod   │  │          │  │Cross-Acct │  │
-│  │with IRSA  │─┼──────────▶│  │S3 Role    │  │
+│  │测试 Pod   │  │          │  │跨账户     │  │
+│  │(带 IRSA)  │─┼──────────▶│  │S3 角色     │  │
 │  └───────────┘  │          │  └───────────┘  │
 │        │        │          │                 │
 │  ┌─────▼─────┐  │          │                 │
 │  │S3 VPC     │  │          │                 │
-│  │Endpoint   │◀─┼──────────┤                 │
-│  │(Gateway)  │  │ Private  │                 │
-│  └───────────┘  │ Link     │                 │
+│  │网关端点   │◀─┼──────────┤                 │
+│  │(Gateway)  │  │ 专线链路  │                 │
+│  └───────────┘  │          │                 │
 └─────────────────┘          └─────────────────┘
 ```
 
-### Key Components
+## 核心组件
 
-**Account A (EKS Account)**:
-- EKS cluster with IRSA enabled
-- VPC with S3 VPC Endpoint (Gateway type) for private S3 access
-- IAM role for EKS pods with cross-account assume role permissions
-- Terraform state management
+### 账户 A (EKS 账户)
+- **EKS 集群**: 启用 IRSA 功能的 Kubernetes 集群
+- **VPC 设计**: 配置 S3 VPC 网关端点，实现私有网络 S3 访问
+- **IAM 角色链**: Pod 角色具备跨账户角色扮演权限
+- **状态管理**: 使用 S3 后端管理 Terraform 状态
 
-**Account B (S3 Account)**:
-- S3 bucket for cross-account access
-- IAM role that can be assumed by Account A's pod role
-- S3 access policies attached to cross-account role
-- Terraform state management
+### 账户 B (S3 账户)
+- **S3 存储桶**: 用于跨账户访问的目标存储
+- **跨账户角色**: 可被账户 A Pod 角色扮演的 IAM 角色
+- **权限策略**: 精确控制 S3 访问权限
+- **状态管理**: 独立的 Terraform 状态后端
 
-**Security Features**:
-- **IRSA**: Pod-level IAM credentials
-- **Cross-account IAM role assumption**: Secure delegation between accounts
-- **VPC Endpoint**: S3 traffic stays within AWS backbone (cost optimization)
-- **Principle of least privilege**: Only necessary S3 permissions granted
+### 安全特性
+- **IRSA**: Pod 级别的 IAM 凭证，无需管理长期凭证
+- **跨账户委托**: 通过 IAM 角色链实现安全的权限委托
+- **网络隔离**: S3 流量通过 AWS 专网，避免公网暴露
+- **最小权限原则**: 仅授予必要的 S3 操作权限
 
-## Prerequisites
+## 快速开始
 
-- Terraform >= 1.10.0
-- AWS CLI configured with profiles for both accounts
-- kubectl
-- Bash shell (for deployment scripts)
-
-## Quick Start
-
-### 1. Configure Environment
-
-Copy and configure the environment file:
+### 环境配置
 
 ```bash
+# 配置 AWS 账户信息
 cp .env.example .env
-# Edit .env with your AWS account details
+# 编辑 .env 文件，填入实际的账户配置
 ```
 
-Required environment variables:
+环境变量配置：
 ```bash
-# Account A (EKS Account)
-ACCOUNT_A_ID=111111111111
-ACCOUNT_A_PROFILE=your-account-a-profile
+# 账户 A (EKS 账户)
+ACCOUNT_A_ID=488363440930
+ACCOUNT_A_PROFILE=eks-account-profile
 
-# Account B (S3 Account)
-ACCOUNT_B_ID=222222222222
-ACCOUNT_B_PROFILE=your-account-b-profile
+# 账户 B (S3 账户)
+ACCOUNT_B_ID=498136949440
+ACCOUNT_B_PROFILE=s3-account-profile
 
-# AWS Configuration
+# AWS 区域配置
 AWS_REGION=ap-northeast-1
 CLUSTER_NAME=s3bridge-cluster
-S3_BUCKET_NAME=s3bridge-demo-bucket-$(date +%s)  # Auto-generates unique name
+S3_BUCKET_NAME=s3bridge-demo-bucket-$(date +%s)
 ```
 
-**⚠️ Important: Check for VPC CIDR Conflicts**
-Before deploying, ensure you don't have existing VPCs with overlapping CIDR blocks:
-```bash
-aws ec2 describe-vpcs --region $AWS_REGION \
-  --query 'Vpcs[].{VpcId:VpcId,CidrBlock:CidrBlock,Name:Tags[?Key==`Name`].Value|[0]}' \
-  --output table
+### 部署架构
 
-# If you see overlapping CIDRs (e.g., multiple 10.0.0.0/16),
-# destroy the conflicting VPCs first
-```
-
-### 2. Deploy Infrastructure
-
-**Automated Deployment (Recommended)**:
+**自动化部署（推荐）**：
 ```bash
 ./scripts/deploy.sh
 ```
 
-This single command handles:
-- Terraform state bucket setup
-- Cross-account dependency resolution
-- EKS cluster deployment with IRSA
-- S3 bucket creation with cross-account access
-- Kubernetes configuration
-- Test pod deployment
-- Cross-account S3 access verification
+一键部署脚本处理：
+- Terraform 状态存储桶初始化
+- 跨账户依赖关系解析
+- EKS 集群与 IRSA 配置
+- S3 存储桶与跨账户访问设置
+- Kubernetes 配置更新
+- 测试 Pod 部署与验证
 
-**Manual Deployment**:
-```bash
-# Step 1: Set up Terraform state buckets
-./scripts/setup-state-buckets.sh
-
-# Step 2: Deploy Account A (EKS)
-cd account-a
-terraform init
-terraform apply \
-  -var="aws_region=$AWS_REGION" \
-  -var="cluster_name=$CLUSTER_NAME" \
-  -var="s3_bucket_account_id=$ACCOUNT_B_ID" \
-  -auto-approve
-
-# Step 3: Get pod role ARN
-POD_ROLE_ARN=$(terraform output -raw pod_role_arn)
-
-# Step 4: Deploy Account B (S3)
-cd ../account-b
-terraform init
-terraform apply \
-  -var="aws_region=$AWS_REGION" \
-  -var="s3_bucket_name=$S3_BUCKET_NAME" \
-  -var="eks_account_role_arn=$POD_ROLE_ARN" \
-  -auto-approve
-
-# Step 5: Configure kubectl
-AWS_PROFILE=$ACCOUNT_A_PROFILE aws eks update-kubeconfig \
-  --region $AWS_REGION \
-  --name $CLUSTER_NAME
-
-# Step 6: Deploy test pod
-sed "s/<ACCOUNT_A_POD_ROLE_ARN>/$POD_ROLE_ARN/g" k8s/test-pod.yaml > k8s/test-pod-updated.yaml
-kubectl apply -f k8s/test-pod-updated.yaml
-
-# Step 7: Test S3 access
-export S3_BUCKET_NAME=$(terraform output -raw s3_bucket_name)
-bash k8s/verify-scripts/test-s3-access.sh
-```
-
-### 3. Verify Cross-Account Access
-
-The deployment script automatically runs verification tests. You can also run them manually:
+### 验证部署
 
 ```bash
-# Check pod identity
+# 检查 Pod 身份
 kubectl exec -it s3bridge-test-pod -- aws sts get-caller-identity
 
-# Test S3 bucket access
+# 测试 S3 存储桶访问
 kubectl exec -it s3bridge-test-pod -- aws s3 ls s3://$S3_BUCKET_NAME/
 
-# Test S3 write access
-kubectl exec -it s3bridge-test-pod -- sh -c "echo 'Hello from S3Bridge Pod' > /tmp/test.txt"
-kubectl exec -it s3bridge-test-pod -- aws s3 cp /tmp/test.txt s3://$S3_BUCKET_NAME/test-pod-access.txt
+# 测试 S3 写入权限
+kubectl exec -it s3bridge-test-pod -- sh -c "echo 'Cross-account access successful' > /tmp/test.txt"
+kubectl exec -it s3bridge-test-pod -- aws s3 cp /tmp/test.txt s3://$S3_BUCKET_NAME/demo.txt
 
-# Verify write
-kubectl exec -it s3bridge-test-pod -- aws s3 cp s3://$S3_BUCKET_NAME/test-pod-access.txt /tmp/verify.txt
+# 验证写入结果
+kubectl exec -it s3bridge-test-pod -- aws s3 cp s3://$S3_BUCKET_NAME/demo.txt /tmp/verify.txt
 kubectl exec -it s3bridge-test-pod -- cat /tmp/verify.txt
 ```
 
-## Cost Optimization Features
+## 成本优化策略
 
-### VPC S3 Gateway Endpoint
-- Eliminates NAT Gateway costs for S3 traffic
-- S3 access stays within AWS backbone network
-- No data transfer charges for S3 access from private subnets
+### VPC S3 网关端点
+- **成本节约**: 消除 NAT 网关费用，S3 访问不再产生公网流量成本
+- **性能优化**: 流量保持在 AWS 专网内，延迟更低
+- **安全增强**: 无需通过互联网网关，减少攻击面
 
-### Infrastructure Scale
-- EKS: 2 t3.medium instances (minimum viable)
-- S3: Pay-per-use storage and requests
-- VPC Endpoint: No hourly charge, only per-GB data processing
+### 基础设施规模
+- **EKS 集群**: 2 台 t3.medium 实例（最小可用配置）
+- **S3 存储**: 按需付费模式，存储和请求费用
+- **VPC 端点**: 无小时费用，仅按数据处理量计费
 
-## Cleanup
+## 关键技术点
 
-### Automated Cleanup
-```bash
-./scripts/destroy.sh
-```
+### IAM 角色链设计
+1. **Pod 角色**: EKS Pod 通过 IRSA 扮担 `s3bridge-cluster-pod-role`
+2. **跨账户扮演**: Pod 角色进一步扮演账户 B 的 `s3bridge-cross-account-role`
+3. **权限继承**: 跨账户角色继承目标 S3 存储桶的访问权限
 
-This removes all resources in the correct order and offers optional state bucket cleanup.
+### 网络架构优化
+- **私有子网部署**: EKS 节点部署在私有子网中
+- **专线访问**: S3 流量通过 AWS 专网，不经过互联网
+- **端点配置**: Gateway 类型 VPC 端点，支持高吞吐量访问
 
-### Manual Cleanup
-```bash
-# Delete Kubernetes resources
-kubectl delete -f k8s/test-pod-updated.yaml --ignore-not-found=true
-
-# Destroy Account A resources
-cd account-a
-terraform destroy \
-  -var="aws_region=$AWS_REGION" \
-  -var="cluster_name=$CLUSTER_NAME" \
-  -var="s3_bucket_account_id=$ACCOUNT_B_ID" \
-  -auto-approve
-
-# Destroy Account B resources
-cd ../account-b
-terraform destroy \
-  -var="aws_region=$AWS_REGION" \
-  -var="s3_bucket_name=$S3_BUCKET_NAME" \
-  -var="eks_account_role_arn=arn:aws:iam::${ACCOUNT_A_ID}:role/s3bridge-cluster-pod-role" \
-  -auto-approve
-
-# Clean up state buckets (optional)
-./scripts/cleanup-state-buckets.sh
-```
-
-## Project Structure
+## 架构目录
 
 ```
 play-irsa-s3-bridge/
-├── .env                         # AWS account configuration
-├── scripts/                     # Automation scripts
-│   ├── deploy.sh               # Complete deployment automation
-│   ├── destroy.sh              # Complete cleanup automation
-│   ├── setup-state-buckets.sh  # Terraform state bucket setup
-│   └── cleanup-state-buckets.sh # State bucket cleanup
-├── account-a/                   # EKS cluster and pod IAM configuration
-│   ├── main.tf                 # EKS, VPC, VPC Endpoint, IAM roles
-│   ├── variables.tf            # Input variables
-│   └── outputs.tf              # EKS cluster and pod role outputs
-├── account-b/                   # S3 bucket and cross-account access
-│   ├── main.tf                 # S3 bucket, cross-account IAM role
-│   ├── variables.tf            # Input variables
-│   └── outputs.tf              # S3 bucket and cross-account role outputs
-├── k8s/                         # Kubernetes manifests and scripts
-│   ├── test-pod.yaml          # ServiceAccount and test pod (template)
+├── .env                         # AWS 账户配置文件
+├── scripts/                     # 自动化部署脚本
+│   ├── deploy.sh               # 完整部署自动化
+│   ├── destroy.sh              # 资源清理自动化
+│   ├── setup-state-buckets.sh  # Terraform 状态初始化
+│   └── cleanup-state-buckets.sh # 状态存储清理
+├── account-a/                   # EKS 账户配置
+│   ├── main.tf                 # EKS、VPC、端点、IAM 角色定义
+│   ├── variables.tf            # 输入变量配置
+│   └── outputs.tf              # 输出变量定义
+├── account-b/                   # S3 账户配置
+│   ├── main.tf                 # S3 存储桶、跨账户 IAM 角色
+│   ├── variables.tf            # 输入变量配置
+│   └── outputs.tf              # 输出变量定义
+├── k8s/                         # Kubernetes 资源定义
+│   ├── test-pod.yaml          # ServiceAccount 与测试 Pod 模板
 │   └── verify-scripts/
-│       └── test-s3-access.sh  # Cross-account S3 verification script
-├── CLAUDE.md                   # Claude Code guidance
-└── README.md                   # This file
+│       └── test-s3-access.sh  # 跨账户 S3 访问验证脚本
+├── CLAUDE.md                   # Claude Code 辅助配置
+├── NOTES.md                     # 技术问题解决笔记
+└── README.md                   # 项目说明文档
 ```
 
-## Security Considerations
+## 最佳实践与故障排查
 
-### IAM Role Chain
-1. EKS pod assumes `s3bridge-cluster-pod-role` via IRSA
-2. Pod role assumes `s3bridge-cross-account-role` in Account B
-3. Cross-account role has S3 permissions on target bucket
+### 常见问题处理
 
-### Network Security
-- S3 traffic uses VPC Gateway Endpoint (stays within AWS network)
-- No internet gateway required for S3 access
-- Private subnets for enhanced security
-
-### Access Control
-- Pod role restricted to specific ServiceAccount
-- Cross-account role restricted to specific S3 bucket
-- Least privilege permissions enforced
-
-## Troubleshooting
-
-### Common Issues
-
-**Terraform State Bucket Errors**:
+**VPC CIDR 冲突检测**：
 ```bash
-# Re-initialize state buckets
-./scripts/setup-state-buckets.sh
-```
-
-**Pod Cannot Assume Cross-Account Role**:
-- Verify Account B's trust policy includes Account A's pod role ARN
-- Check pod role has sts:AssumeRole permissions for Account B's role
-
-**S3 Access Denied**:
-- Verify cross-account role has proper S3 permissions
-- Check S3 bucket policy allows cross-account access
-- Ensure VPC endpoint is properly configured
-
-**kubectl Connection Issues**:
-```bash
-# Refresh kubeconfig
-AWS_PROFILE=$ACCOUNT_A_PROFILE aws eks update-kubeconfig \
-  --region $AWS_REGION \
-  --name $CLUSTER_NAME
-```
-
-**EKS Node Group Creation Failed**:
-- **VPC CIDR Conflicts**: Check for overlapping VPC CIDR blocks
-```bash
-# Check for VPC CIDR conflicts in your target region
+# 检查目标区域是否存在 CIDR 冲突
 aws ec2 describe-vpcs --region $AWS_REGION \
   --query 'Vpcs[].{VpcId:VpcId,CidrBlock:CidrBlock,Name:Tags[?Key==`Name`].Value|[0]}' \
   --output table
 
-# Example output showing conflicting CIDRs:
-# -------------------------------------------
-# |            DescribeVpcs                |
-# +----------------------+-----------------+
-# | vpc-0123456789abcdef0|  10.0.0.0/16    |
-# | vpc-0fedcba9876543210|  10.0.0.0/16    |  <- CONFLICT!
-# | vpc-abcdef1234567890|  192.168.0.0/16  |
-# -------------------------------------------
+# 冲突示例：
+# | vpc-0123456789abcdef0 |  10.0.0.0/16    |
+# | vpc-0fedcba9876543210 |  10.0.0.0/16    |  <- 冲突！
+# | vpc-abcdef1234567890 |  192.168.0.0/16  |
 
-# If you find overlapping CIDRs (e.g., multiple VPCs with 10.0.0.0/16),
-# you must either:
-# 1. Destroy the conflicting VPC(s), OR
-# 2. Update your project's CIDR range in account-a/main.tf
+# 解决方案：本项目使用 192.168.0.0/16 避免默认 CIDR 冲突
 ```
-- **Symptom**: `NodeCreationFailure: Unhealthy nodes in the kubernetes cluster`
-- **Root Cause**: EKS nodes cannot join the cluster when multiple VPCs in the same region have overlapping CIDR blocks
-- **Solution**: This project uses `192.168.0.0/16` to avoid common conflicts with default 10.0.0.0/16 ranges
-- **Note**: VPC CIDR conflicts cannot be prevented in Terraform code as they involve resources outside the project scope
 
-### Verification Commands
+**节点组创建失败**：
+- **症状**: `NodeCreationFailure: Unhealthy nodes in the kubernetes cluster`
+- **根因**: VPC CIDR 冲突或 IAM 角色权限配置错误
+- **解决方案**: 详见 `NOTES.md` 中的详细排查过程
+
+**跨账户角色扮演失败**：
+- 验证账户 B 的信任策略包含账户 A 的 Pod 角色 ARN
+- 检查 Pod 角色是否具备 `sts:AssumeRole` 权限
+- 确认跨账户角色的信任关系配置正确
+
+### 架构验证命令
 
 ```bash
-# Check Terraform state
+# 检查 Terraform 状态
 terraform state list
 
-# Verify AWS credentials
+# 验证 AWS 凭证配置
 aws sts get-caller-identity
 
-# Check pod status
+# 检查 Pod 运行状态
 kubectl get pods -o wide
 
-# Check ServiceAccount
+# 验证 ServiceAccount 配置
 kubectl get serviceaccount s3bridge-app -o yaml
 
-# Test network connectivity
+# 测试网络连通性
 kubectl exec -it s3bridge-test-pod -- nc -zv s3.ap-northeast-1.amazonaws.com 443
 ```
 
-## Contributing
+## 清理资源
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+```bash
+# 自动化清理
+./scripts/destroy.sh
 
-## License
+# 手动清理（如需精细控制）
+kubectl delete -f k8s/test-pod-updated.yaml --ignore-not-found=true
+cd account-a && terraform destroy -auto-approve
+cd ../account-b && terraform destroy -auto-approve
+```
 
-This project is for educational and demonstration purposes. Use at your own risk and ensure proper security measures in production environments.
+---
+
+*这个项目展示了企业级 AWS 跨账户访问的最佳实践，适合在生产环境中参考和定制化。*
