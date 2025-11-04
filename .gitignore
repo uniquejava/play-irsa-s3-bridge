@@ -30,9 +30,12 @@ Thumbs.db
 
 # Kubernetes files
 *.kubeconfig
-*.yaml
-*.yml
-!k8s/*.yaml.template
+# Only ignore template files and temporary/generated yaml files
+*k8s*/*.template.yaml
+*temp*.yaml
+*backup*.yaml
+*.bak.yaml
+*.tmp.yaml
 
 # Logs
 *.log
