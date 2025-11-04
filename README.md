@@ -2,6 +2,16 @@
 
 这个项目演示了如何通过 IAM Roles for Service Accounts (IRSA) 实现 EKS Pod 跨账户访问 S3 的完整方案。架构跨越两个 AWS 账户，展示了安全且成本优化的跨账户资源访问模式。
 
+```shell
+$ aws eks update-kubeconfig \
+--region ap-northeast-1 \
+--name cyper-s3bridge-staging-eks
+
+$ k get nodes
+NAME                                            STATUS   ROLES    AGE     VERSION
+ip-10-0-20-38.ap-northeast-1.compute.internal   Ready    <none>   5m30s   v1.34.1-eks-113cf36
+```
+
 ## 架构设计
 
 ```
