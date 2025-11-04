@@ -10,6 +10,10 @@ $ aws eks update-kubeconfig \
 $ k get nodes
 NAME                                            STATUS   ROLES    AGE     VERSION
 ip-10-0-20-38.ap-northeast-1.compute.internal   Ready    <none>   5m30s   v1.34.1-eks-113cf36
+
+$ k auth can-i "*" "*"
+yes
+
 ```
 
 ## 架构设计

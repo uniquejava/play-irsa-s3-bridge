@@ -6,4 +6,11 @@ locals {
   zone2="ap-northeast-1c"
   eks_name = "${local.prefix}-eks"
   eks_version = "1.34"
+
+  tags = {
+    Environment = local.env
+    Project = local.prefix
+    Owner = "cyper"
+    Terraform = "true"
+  }
 }
