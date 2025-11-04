@@ -1,5 +1,5 @@
 resource "aws_iam_role" "nodes" {
-  name = "${local.prefix}-eks-nodes"
+  name               = "${local.prefix}-eks-nodes"
   assume_role_policy = <<POLICY
 {
   "Version": "2012-10-17",
@@ -30,17 +30,17 @@ resource "aws_iam_role_policy_attachment" "amazon_ecr_ro_policy" {
 }
 
 resource "aws_eks_node_group" "general" {
-  cluster_name  = aws_eks_cluster.eks.name
-  version = local.eks_version
+  cluster_name    = aws_eks_cluster.eks.name
+  version         = local.eks_version
   node_group_name = "general"
-  node_role_arn = aws_iam_role.nodes.arn
+  node_role_arn   = aws_iam_role.nodes.arn
 
   subnet_ids = [
     aws_subnet.private_zone1.id,
     aws_subnet.private_zone2.id
   ]
 
-  capacity_type = "ON_DEMAND"
+  capacity_type  = "ON_DEMAND"
   instance_types = ["t3.medium"]
 
   scaling_config {

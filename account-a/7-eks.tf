@@ -1,5 +1,5 @@
 resource "aws_iam_role" "eks" {
-  name = "${local.prefix}-eks-cluster"
+  name               = "${local.prefix}-eks-cluster"
   assume_role_policy = <<POLICY
 {
   "Version": "2012-10-17",
@@ -24,9 +24,9 @@ resource "aws_iam_role_policy_attachment" "eks" {
 # EKS Control Plane ( <=10 min )
 resource "aws_eks_cluster" "eks" {
   name     = local.eks_name
-  version = local.eks_version
+  version  = local.eks_version
   role_arn = aws_iam_role.eks.arn
-  tags = local.tags
+  tags     = local.tags
 
   vpc_config {
     # 你理解得非常准确：这个 endpoint 就是 K8s API Server 的地址
@@ -54,7 +54,7 @@ resource "aws_eks_cluster" "eks" {
 
   access_config {
     # can be old "CONFIG_MAP"
-    authentication_mode = "API"
+    authentication_mode                         = "API"
     bootstrap_cluster_creator_admin_permissions = true
   }
 
