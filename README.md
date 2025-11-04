@@ -1,44 +1,46 @@
-# EKS 跨账户 S3 访问实战：IRSA 架构实现
+# EKS Cross-Account S3 Access: IRSA Architecture Implementation
 
-通过 IAM Roles for Service Accounts (IRSA) 实现 EKS Pod 跨账户访问 S3 的完整方案，使用 FastAPI 应用验证功能。
+Complete solution for EKS pods to access S3 across AWS accounts using IAM Roles for Service Accounts (IRSA), validated with FastAPI application.
 
-## 🎯 项目状态
+English | [简体中文](README.zh-CN.md)
 
-**✅ 实现完成** - IRSA 跨账户 S3 访问功能已完全实现并通过测试
+## 🎯 Project Status
 
-- **Account A** (488363440930): EKS 集群 + IRSA 配置
-- **Account B** (498136949440): S3 存储桶 + 跨账户角色
-- **测试应用**: FastAPI 服务验证所有功能
+**✅ Implementation Complete** - IRSA cross-account S3 access fully implemented and tested
 
-## 🏗️ 架构概览
+- **Account A** (488363440930): EKS cluster + IRSA configuration
+- **Account B** (498136949440): S3 bucket + cross-account role
+- **Test Application**: FastAPI service validates all functionality
+
+## 🏗️ Architecture Overview
 
 ```
 ┌─────────────────┐          ┌─────────────────┐
-│   账户 A        │          │   账户 B        │
-│  (EKS 账户)     │          │  (S3 账户)     │
+│   Account A     │          │   Account B     │
+│  (EKS Account)  │          │  (S3 Account)  │
 │  ┌───────────┐  │ IRSA +   │  ┌───────────┐  │
-│  │EKS 集群   │  │跨账户   │  │ S3 存储桶 │  │
-│  └─────┬─────┘  │ 角色扮演  │  └───────────┘  │
+│  │EKS Cluster│  │Cross-Acct│  │ S3 Bucket │  │
+│  └─────┬─────┘  │ Role Ass  │  └───────────┘  │
 │        │        │   ───────▶│                 │
 │  ┌─────▼─────┐  │          │  ┌───────────┐  │
-│  │s3bridge   │  │          │  │跨账户     │  │
-│  │FastAPI Pod│─┼──────────▶│  │S3 角色     │  │
+│  │s3bridge   │  │          │  │Cross-Acct │  │
+│  │FastAPI Pod│─┼──────────▶│  │S3 Role    │  │
 │  └───────────┘  │          │  └───────────┘  │
 └─────────────────┘          └─────────────────┘
 ```
 
-## 🚀 快速部署
+## 🚀 Quick Deployment
 
-### 前置要求
-- AWS CLI 配置好两个 profiles：
+### Prerequisites
+- AWS CLI configured with two profiles:
   - Account A (EKS): `pes_songbai`
   - Account B (S3): `xiaohao-4981`
-- Docker 和 kubectl 已安装
+- Docker and kubectl installed
 
-### 1. 基础设施部署
+### 1. Infrastructure Deployment
 
 ```bash
-# Account A - EKS 集群和 IRSA
+# Account A - EKS cluster and IRSA
 cd account-a
 terraform init
 AWS_PROFILE=pes_songbai terraform apply -auto-approve \
@@ -46,7 +48,7 @@ AWS_PROFILE=pes_songbai terraform apply -auto-approve \
   -var="cluster_name=cyper-s3bridge-staging-eks" \
   -var="s3_bucket_account_id=498136949440"
 
-# Account B - S3 存储桶和跨账户角色
+# Account B - S3 bucket and cross-account role
 cd ../account-b
 terraform init
 AWS_PROFILE=xiaohao-4981 terraform apply -auto-approve \
@@ -55,7 +57,7 @@ AWS_PROFILE=xiaohao-4981 terraform apply -auto-approve \
   -var="eks_account_role_arn=$(cd ../account-a && AWS_PROFILE=pes_songbai terraform output -raw pod_role_arn)"
 ```
 
-### 2. 配置 kubectl
+### 2. Configure kubectl
 
 ```bash
 AWS_PROFILE=pes_songbai aws eks update-kubeconfig \
@@ -63,46 +65,46 @@ AWS_PROFILE=pes_songbai aws eks update-kubeconfig \
   --name cyper-s3bridge-staging-eks
 ```
 
-### 3. 部署测试应用
+### 3. Deploy Test Application
 
 ```bash
-# 构建和推送镜像
+# Build and push image
 cd testing-app
 docker build -t uniquejava/irsa-test:latest .
 docker push uniquejava/irsa-test:latest
 
-# 部署到 Kubernetes
+# Deploy to Kubernetes
 cd ../account-a
 kubectl apply -f 12-k8s-s3bridge.yaml
 kubectl wait --for=condition=ready pod -l app=s3bridge --timeout=120s
 
-# 设置端口转发
+# Set up port forwarding
 kubectl port-forward service/s3bridge-service 8080:80 &
 ```
 
-### 4. 验证功能
+### 4. Validate Functionality
 
 ```bash
-# 健康检查
+# Health check
 curl http://localhost:8080/health
 
-# IRSA 身份验证
+# IRSA identity verification
 curl http://localhost:8080/identity
 
-# 跨账户 S3 访问
+# Cross-account S3 access
 curl http://localhost:8080/s3-test
 ```
 
-## 📊 测试结果
+## 📊 Test Results
 
-### ✅ 预期输出
+### ✅ Expected Output
 
-**健康检查**：
+**Health Check**:
 ```json
 {"status":"healthy"}
 ```
 
-**身份验证**：
+**Identity Verification**:
 ```json
 {
   "account": "488363440930",
@@ -111,7 +113,7 @@ curl http://localhost:8080/s3-test
 }
 ```
 
-**S3 访问**：
+**S3 Access**:
 ```json
 {
   "status": "success",
@@ -122,77 +124,78 @@ curl http://localhost:8080/s3-test
 }
 ```
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 play-irsa-s3-bridge/
-├── README.md                     # 项目主文档（本文件）
-├── NOTES.md                      # 详细技术实现笔记
-├── CLAUDE.md                     # Claude Code 辅助配置
-├── account-a/                    # Account A (EKS) 配置
-│   ├── 1-vpc.tf                  # VPC 网络
-│   ├── 2-eks-cluster.tf          # EKS 集群
-│   ├── 3-eks-nodegroup.tf        # 节点组
-│   ├── 9-irsa-oidc.tf            # IRSA OIDC 提供者
-│   ├── 10-irsa-pod-role.tf       # Pod IAM 角色
-│   ├── 11-irsa-policy.tf         # IRSA 策略
-│   └── 12-k8s-s3bridge.yaml      # Kubernetes 部署
-├── account-b/                    # Account B (S3) 配置
-│   ├── 1-s3-bucket.tf            # S3 存储桶
-│   ├── 2-iam-role.tf             # 跨账户角色
-│   └── 3-s3-policy.tf            # S3 访问策略
-└── testing-app/                  # FastAPI 测试应用
-    ├── app.py                    # FastAPI 应用
-    ├── Dockerfile                # 容器构建
-    ├── requirements.txt          # 依赖
-    └── README.md                 # 应用说明
+├── README.md                     # Project main documentation (this file)
+├── README.zh-CN.md               # Chinese version
+├── NOTES.md                      # Detailed technical implementation notes
+├── CLAUDE.md                     # Claude Code assistance configuration
+├── account-a/                    # Account A (EKS) configuration
+│   ├── 1-vpc.tf                  # VPC network
+│   ├── 2-eks-cluster.tf          # EKS cluster
+│   ├── 3-eks-nodegroup.tf        # Node group
+│   ├── 9-irsa-oidc.tf            # IRSA OIDC provider
+│   ├── 10-irsa-pod-role.tf       # Pod IAM role
+│   ├── 11-irsa-policy.tf         # IRSA policies
+│   └── 12-k8s-s3bridge.yaml      # Kubernetes deployment
+├── account-b/                    # Account B (S3) configuration
+│   ├── 1-s3-bucket.tf            # S3 bucket
+│   ├── 2-iam-role.tf             # Cross-account role
+│   └── 3-s3-policy.tf            # S3 access policies
+└── testing-app/                  # FastAPI test application
+    ├── app.py                    # FastAPI application
+    ├── Dockerfile                # Container build
+    ├── requirements.txt          # Dependencies
+    └── README.md                 # Application documentation
 ```
 
-## 🛠️ 故障排查
+## 🛠️ Troubleshooting
 
-### 常见问题
+### Common Issues
 
-**IRSA 凭证问题**：
+**IRSA Credential Issues**:
 ```bash
 kubectl get serviceaccount s3bridge -o yaml
 kubectl exec -it deployment/s3bridge-app -- aws sts get-caller-identity
 ```
 
-**跨账户访问失败**：
+**Cross-Account Access Failure**:
 ```bash
 aws iam get-role --role-name s3bridge-cross-account-role --profile xiaohao-4981
 ```
 
-**Pod 状态问题**：
+**Pod Status Issues**:
 ```bash
 kubectl get pods -l app=s3bridge
 kubectl logs -l app=s3bridge
 ```
 
-## 🧹 清理资源
+## 🧹 Cleanup Resources
 
 ```bash
-# 删除 Kubernetes 资源
+# Delete Kubernetes resources
 kubectl delete -f account-a/12-k8s-s3bridge.yaml
 
-# 销毁基础设施
+# Destroy infrastructure
 cd account-b && AWS_PROFILE=xiaohao-4981 terraform destroy -auto-approve
 cd ../account-a && AWS_PROFILE=pes_songbai terraform destroy -auto-approve
 ```
 
-## 🎯 成功标准
+## 🎯 Success Criteria
 
-- ✅ **零配置**: Pod 无需手动 AK/SK 设置
-- ✅ **自动凭证**: IRSA 自动提供 AWS 临时凭证
-- ✅ **跨账户访问**: Account A → Account B 的 S3 访问成功
-- ✅ **完整测试**: FastAPI 应用验证所有功能
+- ✅ **Zero Configuration**: Pods require no manual AK/SK setup
+- ✅ **Automatic Credentials**: IRSA automatically provides AWS temporary credentials
+- ✅ **Cross-Account Access**: Account A → Account B S3 access successful
+- ✅ **Complete Testing**: FastAPI application validates all functionality
 
-## 📖 详细文档
+## 📖 Detailed Documentation
 
-- **技术实现细节**: 见 `NOTES.md`
-- **应用使用说明**: 见 `testing-app/README.md`
-- **Claude Code 指导**: 见 `CLAUDE.md`
+- **Technical Implementation Details**: See `NOTES.md`
+- **Application Usage**: See `testing-app/README.md`
+- **Claude Code Guidance**: See `CLAUDE.md`
 
 ---
 
-*展示企业级 IRSA 跨账户访问的最佳实践*
+*Demonstrating enterprise-grade IRSA cross-account access best practices*
